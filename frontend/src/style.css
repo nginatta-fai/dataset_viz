@@ -19,9 +19,10 @@ body {
 }
 
 .app {
-  width: min(1600px, 98vw);
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 24px;
+  padding: 20px 24px;
 }
 
 .panel {
@@ -128,12 +129,14 @@ body {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   width: 100%;
+  height: 100%;
 }
 
 .result-panel {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
 }
 
 .table-area {
@@ -142,7 +145,6 @@ body {
   display: flex;
   flex-direction: column;
   overflow: auto;
-  max-height: calc(100vh - 240px);
 }
 
 .main-column {
@@ -150,7 +152,7 @@ body {
   flex-direction: column;
   gap: 12px;
   min-height: 0;
-  height: calc(100vh - 260px);
+  height: calc(100vh - 200px);
 }
 
 
