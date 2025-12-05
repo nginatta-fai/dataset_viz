@@ -1,0 +1,20 @@
+[project]
+name = "dataset-viz-backend"
+version = "0.1.0"
+description = "Local-only Hugging Face dataset visualizer backend"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.23.0",
+    "datasets>=2.19.0",
+    "duckdb>=1.1.0",
+    "pyarrow>=15.0.0",
+    "pydantic>=2.6.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
