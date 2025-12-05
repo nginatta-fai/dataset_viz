@@ -119,6 +119,8 @@ def _file_dataset_to_arrow(path: Path, fmt: str, limit: Optional[int] = None) ->
             sql += f" LIMIT {int(limit)}"
         return duckdb.query(sql).arrow()
 
+    import pyarrow.ipc as ipc
+
     files = sorted([f for f in path.glob("*.arrow") if not f.name.startswith("cache-")])
     if not files:
         # Fall back to all .arrow files if we only had cache shards.
@@ -126,11 +128,26 @@ def _file_dataset_to_arrow(path: Path, fmt: str, limit: Optional[int] = None) ->
     if not files:
         raise HTTPException(status_code=400, detail="No .arrow files found in dataset directory")
 
-    # HF cache writes Arrow streams (not file format), so use ipc.open_stream.
-    import pyarrow.ipc as ipc
+    def _arrow_kind(file: Path) -> str:
+        with file.open("rb") as fh:
+            magic = fh.read(6)
+        if magic.startswith(b"ARROW1") or magic.startswith(b"ARROW") or magic.startswith(b"FEA1"):
+            return "file"
+        if magic.startswith(b"\xff\xff\xff\xff"):
+            return "stream"
+        try:
+            with ipc.open_file(file):
+                return "file"
+        except Exception:
+            return "stream"
 
+    kind = _arrow_kind(files[0])
+
+    # Return empty table with correct schema without materialising data.
     if limit == 0:
-        # Return empty table with correct schema without materialising data.
+        if kind == "file":
+            with ipc.open_file(files[0]) as reader:
+                return pa.Table.from_batches([], schema=reader.schema)
         with ipc.open_stream(files[0]) as reader:
             return pa.Table.from_batches([], schema=reader.schema)
 
@@ -138,29 +155,50 @@ def _file_dataset_to_arrow(path: Path, fmt: str, limit: Optional[int] = None) ->
     tables: list[pa.Table] = []
 
     for file in files:
-        with ipc.open_stream(file) as reader:
-            if remaining is None:
-                tables.append(reader.read_all())
-                continue
+        if kind == "file":
+            with ipc.open_file(file) as reader:
+                if remaining is None:
+                    tables.append(reader.read_all())
+                    continue
+                batches = []
+                for i in range(reader.num_record_batches):
+                    batch = reader.get_batch(i)
+                    if remaining < batch.num_rows:
+                        batch = batch.slice(0, remaining)
+                    batches.append(batch)
+                    remaining -= batch.num_rows
+                    if remaining <= 0:
+                        break
+                if batches:
+                    tables.append(pa.Table.from_batches(batches))
+        else:
+            with ipc.open_stream(file) as reader:
+                if remaining is None:
+                    tables.append(reader.read_all())
+                    continue
 
-            batches = []
-            while remaining > 0:
-                batch = reader.read_next_batch()
-                if batch is None:
-                    break
-                if remaining < batch.num_rows:
-                    batch = batch.slice(0, remaining)
-                batches.append(batch)
-                remaining -= batch.num_rows
-                if remaining <= 0:
-                    break
-            if batches:
-                tables.append(pa.Table.from_batches(batches))
-            if remaining is not None and remaining <= 0:
-                break
+                batches = []
+                while remaining > 0:
+                    batch = reader.read_next_batch()
+                    if batch is None:
+                        break
+                    if remaining < batch.num_rows:
+                        batch = batch.slice(0, remaining)
+                    batches.append(batch)
+                    remaining -= batch.num_rows
+                    if remaining <= 0:
+                        break
+                if batches:
+                    tables.append(pa.Table.from_batches(batches))
+
+        if remaining is not None and remaining <= 0:
+            break
 
     if not tables:
         # No rows requested / no data, return empty with schema from first file.
+        if kind == "file":
+            with ipc.open_file(files[0]) as reader:
+                return pa.Table.from_batches([], schema=reader.schema)
         with ipc.open_stream(files[0]) as reader:
             return pa.Table.from_batches([], schema=reader.schema)
     return pa.concat_tables(tables)
