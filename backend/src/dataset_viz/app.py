@@ -66,7 +66,12 @@ def _detect_format(path: Path) -> str:
     Return "hf" for load_from_disk-style datasets, "parquet" for parquet files,
     "arrow" for IPC files, else raise.
     """
-    if (path / "dataset_info.json").exists() or (path / "state.json").exists():
+    # A true `save_to_disk` dataset always contains state.json. Cached datasets
+    # from `load_dataset` often have only dataset_info.json alongside Arrow
+    # shards and are *not* load_from_disk compatible. Require state.json to
+    # classify as Hugging Face; otherwise fall through so Arrow/Parquet paths
+    # get picked up and handled as flat files.
+    if (path / "state.json").exists():
         return "hf"
     if list(path.glob("*.parquet")):
         return "parquet"
@@ -107,15 +112,58 @@ def _hf_split_to_arrow(split: Dataset) -> pa.Table:
 
 
 def _file_dataset_to_arrow(path: Path, fmt: str, limit: Optional[int] = None) -> pa.Table:
-    pattern = str(path / f"*.{ 'parquet' if fmt == 'parquet' else 'arrow' }")
-    sql = (
-        f"SELECT * FROM read_parquet('{pattern}')"
-        if fmt == "parquet"
-        else f"SELECT * FROM read_ipc('{pattern}')"
-    )
-    if limit:
-        sql += f" LIMIT {int(limit)}"
-    return duckdb.query(sql).arrow()
+    if fmt == "parquet":
+        pattern = str(path / "*.parquet")
+        sql = f"SELECT * FROM read_parquet('{pattern}')"
+        if limit:
+            sql += f" LIMIT {int(limit)}"
+        return duckdb.query(sql).arrow()
+
+    files = sorted([f for f in path.glob("*.arrow") if not f.name.startswith("cache-")])
+    if not files:
+        # Fall back to all .arrow files if we only had cache shards.
+        files = sorted(path.glob("*.arrow"))
+    if not files:
+        raise HTTPException(status_code=400, detail="No .arrow files found in dataset directory")
+
+    # HF cache writes Arrow streams (not file format), so use ipc.open_stream.
+    import pyarrow.ipc as ipc
+
+    if limit == 0:
+        # Return empty table with correct schema without materialising data.
+        with ipc.open_stream(files[0]) as reader:
+            return pa.Table.from_batches([], schema=reader.schema)
+
+    remaining = int(limit) if limit is not None else None
+    tables: list[pa.Table] = []
+
+    for file in files:
+        with ipc.open_stream(file) as reader:
+            if remaining is None:
+                tables.append(reader.read_all())
+                continue
+
+            batches = []
+            while remaining > 0:
+                batch = reader.read_next_batch()
+                if batch is None:
+                    break
+                if remaining < batch.num_rows:
+                    batch = batch.slice(0, remaining)
+                batches.append(batch)
+                remaining -= batch.num_rows
+                if remaining <= 0:
+                    break
+            if batches:
+                tables.append(pa.Table.from_batches(batches))
+            if remaining is not None and remaining <= 0:
+                break
+
+    if not tables:
+        # No rows requested / no data, return empty with schema from first file.
+        with ipc.open_stream(files[0]) as reader:
+            return pa.Table.from_batches([], schema=reader.schema)
+    return pa.concat_tables(tables)
 
 
 def _get_arrow_table(root: Path, name: str, split: Optional[str], limit: Optional[int] = None) -> Tuple[pa.Table, bool]:
@@ -226,17 +274,25 @@ def query_dataset(
 
     started = time.perf_counter()
     try:
-        result_arrow = con.execute(sql).arrow()
+        result = con.execute(sql).arrow()
     except Exception as exc:  # pragma: no cover - defensive
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     elapsed_ms = (time.perf_counter() - started) * 1000
 
-    rows = result_arrow.to_pylist()
+    # DuckDB 1.4+ returns a RecordBatchReader; earlier versions return a Table.
+    if hasattr(result, "to_table"):
+        result_table = result.to_table()
+    elif hasattr(result, "read_all"):
+        result_table = result.read_all()
+    else:
+        result_table = result  # assume pyarrow.Table
+
+    rows = result_table.to_pylist()
     max_rows = payload.limit or (DEFAULT_LIMIT if appended else None)
     truncated = truncated_by_reader or (max_rows is not None and len(rows) >= max_rows)
 
     return QueryResponse(
-        columns=result_arrow.schema.names,
+        columns=result_table.schema.names,
         rows=rows,
         row_count=len(rows),
         truncated=truncated,

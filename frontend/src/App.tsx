@@ -3,7 +3,6 @@ import { api, ColumnInfo, QueryResponse } from "./api";
 import { DatasetPicker } from "./components/DatasetPicker";
 import { SqlEditor } from "./components/SqlEditor";
 import { ResultTable } from "./components/ResultTable";
-import { ChartView } from "./components/ChartView";
 
 const DEFAULT_SQL = "SELECT * FROM t LIMIT 100;";
 
@@ -19,9 +18,7 @@ function App() {
   const [result, setResult] = useState<QueryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [chartType, setChartType] = useState<"table" | "bar" | "line" | "scatter" | "hist">("table");
-  const [xField, setXField] = useState<string | null>(null);
-  const [yField, setYField] = useState<string | null>(null);
+  const [autoRunPending, setAutoRunPending] = useState(false);
 
   useEffect(() => {
     setDatasets([]);
@@ -30,6 +27,7 @@ function App() {
     setSelectedSplit(null);
     setSchema([]);
     setResult(null);
+    setAutoRunPending(false);
   }, [datasetRoot]);
 
   const loadDatasets = () => {
@@ -42,7 +40,9 @@ function App() {
       .listDatasets(datasetRoot)
       .then((res) => {
         setDatasets(res.datasets);
-        setSelectedDataset(res.datasets[0] ?? null);
+        const first = res.datasets[0] ?? null;
+        setSelectedDataset(first);
+        setAutoRunPending(Boolean(first));
       })
       .catch((err) => setError(err.message));
   };
@@ -57,6 +57,7 @@ function App() {
         setSplits(res.splits);
         const next = res.splits[0] ?? null;
         setSelectedSplit(next);
+        setAutoRunPending(Boolean(next));
         if (next) {
           return api.schema(selectedDataset, datasetRoot, next);
         }
@@ -74,23 +75,17 @@ function App() {
       .catch((err) => setError(err.message));
   }, [selectedSplit, selectedDataset, datasetRoot]);
 
-  useEffect(() => {
-    if (schema.length) {
-      setXField(schema[0]?.name ?? null);
-      setYField(schema[1]?.name ?? null);
-    }
-  }, [schema]);
-
-  const runQuery = async () => {
+  const runQuery = async (sqlOverride?: string) => {
     if (!selectedDataset || !datasetRoot) {
       setError("Pick a dataset and dataset folder first.");
       return;
     }
+    const sqlToUse = sqlOverride ?? sql;
     setLoading(true);
     setError(null);
     try {
       const res = await api.query(selectedDataset, datasetRoot, {
-        sql,
+        sql: sqlToUse,
         split: selectedSplit,
         limit
       });
@@ -102,6 +97,15 @@ function App() {
       setLoading(false);
     }
   };
+
+  // Auto-run default query once when a dataset/split becomes available.
+  useEffect(() => {
+    if (autoRunPending && selectedDataset && selectedSplit && datasetRoot && !loading) {
+      setSql(DEFAULT_SQL);
+      setAutoRunPending(false);
+      runQuery(DEFAULT_SQL);
+    }
+  }, [autoRunPending, selectedDataset, selectedSplit, datasetRoot, loading]);
 
   const info = useMemo(() => {
     if (!result) return null;
@@ -118,11 +122,10 @@ function App() {
     <div className="app">
       <div style={{ marginBottom: 16 }}>
         <h1 style={{ margin: 0 }}>Dataset Visualizer</h1>
-        <div style={{ color: "#475569" }}>Local-only, DuckDB powered</div>
       </div>
 
       <div className="panel" style={{ marginBottom: 12 }}>
-        <div className="row" style={{ gap: 12, alignItems: "flex-end" }}>
+        <div className="row" style={{ gap: 12, alignItems: "center" }}>
           <div style={{ flex: 1 }}>
             <label>Dataset folder path</label>
             <input
@@ -132,19 +135,19 @@ function App() {
               value={datasetRoot}
               onChange={(e) => setDatasetRoot(e.target.value)}
             />
-            <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
-              Paste a local path containing your datasets (each dataset is a subfolder). Browser file pickers cannot
-              reveal absolute paths without a desktop wrapper.
-            </div>
           </div>
           <button className="btn" onClick={loadDatasets} style={{ whiteSpace: "nowrap" }}>
             Load datasets
           </button>
         </div>
+        <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>
+          Paste a local path containing your datasets (each dataset is a subfolder). Browser file pickers cannot reveal
+          absolute paths without a desktop wrapper.
+        </div>
       </div>
 
       <div className="layout">
-        <div className="grid" style={{ gap: 12 }}>
+        <div className="side-column">
           <DatasetPicker
             datasets={datasets}
             selectedDataset={selectedDataset}
@@ -165,30 +168,19 @@ function App() {
           {error && <div className="error">{error}</div>}
         </div>
 
-        <div className="grid" style={{ gap: 12 }}>
-          <div className="panel">
+        <div className="main-column">
+          <div className="panel result-panel">
             <div className="row" style={{ justifyContent: "space-between" }}>
               <div className="result-meta">
                 <span style={{ fontWeight: 700 }}>Results</span>
                 {info && <span>{info}</span>}
               </div>
-              <button className="btn secondary" onClick={() => setChartType("table")}>
-                Table
-              </button>
             </div>
-            {result && <ResultTable columns={result.columns} rows={result.rows} />}
-            {!result && <div style={{ paddingTop: 8, color: "#94a3b8" }}>Run a query to see results</div>}
+            <div className="table-area">
+              {result && <ResultTable columns={result.columns} rows={result.rows} />}
+              {!result && <div style={{ paddingTop: 8, color: "#94a3b8" }}>Run a query to see results</div>}
+            </div>
           </div>
-
-          <ChartView
-            data={result}
-            type={chartType}
-            onTypeChange={setChartType}
-            xField={xField}
-            yField={yField}
-            onXChange={setXField}
-            onYChange={setYField}
-          />
         </div>
       </div>
     </div>

@@ -19,7 +19,7 @@ body {
 }
 
 .app {
-  max-width: 1180px;
+  width: min(1600px, 98vw);
   margin: 0 auto;
   padding: 24px;
 }
@@ -35,7 +35,14 @@ body {
 .layout {
   display: grid;
   gap: 16px;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 360px minmax(0, 1fr);
+  align-items: start;
+}
+
+.side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .controls label {
@@ -118,10 +125,34 @@ body {
 }
 
 .table-wrapper {
-  overflow: auto;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
+  width: 100%;
 }
+
+.result-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.table-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  max-height: calc(100vh - 240px);
+}
+
+.main-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: calc(100vh - 260px);
+}
+
 
 .chart-controls {
   display: grid;

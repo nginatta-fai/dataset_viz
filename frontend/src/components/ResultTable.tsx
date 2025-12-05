@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ColumnDef,
   flexRender,
@@ -12,6 +12,8 @@ type Props = {
 };
 
 export const ResultTable: React.FC<Props> = ({ columns, rows }) => {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
   const defs = useMemo<ColumnDef<Record<string, unknown>>[]>(
     () =>
       columns.map((key) => ({
@@ -62,22 +64,44 @@ export const ResultTable: React.FC<Props> = ({ columns, rows }) => {
           ))}
         </thead>
         <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <tr key={row.id}>
-              {row.getVisibleCells().map((cell) => (
-                <td
-                  key={cell.id}
-                  style={{
-                    padding: "8px 10px",
-                    borderBottom: "1px solid #f1f5f9",
-                    fontSize: 13
-                  }}
-                >
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {table.getRowModel().rows.map((row) => {
+            const isExpanded = expanded.has(row.id);
+            return (
+              <tr
+                key={row.id}
+                onClick={() => {
+                  const next = new Set(expanded);
+                  next.has(row.id) ? next.delete(row.id) : next.add(row.id);
+                  setExpanded(next);
+                }}
+                style={{
+                  cursor: "pointer",
+                  height: isExpanded ? "auto" : 48,
+                  verticalAlign: "top",
+                  background: isExpanded ? "#f8fafc" : "white"
+                }}
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <td
+                    key={cell.id}
+                    style={{
+                      padding: "8px 10px",
+                      borderBottom: "1px solid #f1f5f9",
+                      fontSize: 13,
+                      whiteSpace: isExpanded ? "normal" : "nowrap",
+                      overflow: isExpanded ? "visible" : "hidden",
+                      textOverflow: isExpanded ? "clip" : "ellipsis",
+                      wordBreak: isExpanded ? "break-word" : "normal",
+                      maxWidth: isExpanded ? "none" : 320
+                    }}
+                    title={isExpanded ? undefined : String(cell.getValue() ?? "")}
+                  >
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
