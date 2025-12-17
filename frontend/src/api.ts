@@ -8,17 +8,20 @@ export type QueryRequest = {
   sql: string;
   split?: string | null;
   limit?: number | null;
+  offset?: number | null;
 };
 
 export type QueryResponse = {
   columns: string[];
-  rows: Record<string, unknown>[];
+  data: unknown[][];
   row_count: number;
   truncated: boolean;
   elapsed_ms: number;
 };
 
-const BASE_URL = "http://127.0.0.1:8000";
+export type CountResponse = { rows: number };
+
+const BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000";
 
 const withRoot = (path: string, root?: string | null) =>
   root ? `${path}${path.includes("?") ? "&" : "?"}root=${encodeURIComponent(root)}` : path;
@@ -30,7 +33,20 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || res.statusText);
+    let message = text || res.statusText;
+    try {
+      const parsed: unknown = text ? JSON.parse(text) : null;
+      if (parsed && typeof parsed === "object" && "detail" in parsed) {
+        const detail = (parsed as { detail?: unknown }).detail;
+        if (typeof detail === "string") message = detail;
+        else message = JSON.stringify(detail);
+      } else if (typeof parsed === "string") {
+        message = parsed;
+      }
+    } catch {
+      // non-JSON response; keep original text/status
+    }
+    throw new Error(message);
   }
   return res.json() as Promise<T>;
 }
@@ -46,9 +62,18 @@ export const api = {
         root
       )
     ),
-  query: (dataset: string, root: string, body: QueryRequest) =>
+  count: (dataset: string, root: string, split?: string | null, signal?: AbortSignal) =>
+    json<CountResponse>(
+      withRoot(
+        `/datasets/${encodeURIComponent(dataset)}/count${split ? `?split=${encodeURIComponent(split)}` : ""}`,
+        root
+      ),
+      { signal }
+    ),
+  query: (dataset: string, root: string, body: QueryRequest, signal?: AbortSignal) =>
     json<QueryResponse>(withRoot(`/datasets/${encodeURIComponent(dataset)}/query`, root), {
       method: "POST",
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal
     })
 };

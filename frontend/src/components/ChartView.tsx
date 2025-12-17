@@ -24,16 +24,19 @@ export const ChartView: React.FC<Props> = ({
   onYChange
 }) => {
   const columns = data?.columns ?? [];
-  const rows = data?.rows ?? [];
+  const columnData = data?.data ?? [];
+
+  const getColumn = (field: string) => {
+    const idx = columns.indexOf(field);
+    return idx >= 0 ? columnData[idx] ?? [] : [];
+  };
 
   const option = useMemo(() => {
-    if (!data || !rows.length) return null;
+    if (!data || data.row_count === 0) return null;
 
     if (type === "hist") {
       if (!xField) return null;
-      const values = rows
-        .map((r) => r[xField])
-        .filter((v): v is number => typeof v === "number");
+      const values = getColumn(xField).filter((v): v is number => typeof v === "number");
       if (!values.length) return null;
       values.sort((a, b) => a - b);
       const bins = 20;
@@ -55,8 +58,8 @@ export const ChartView: React.FC<Props> = ({
     }
 
     if (!xField || !yField) return null;
-    const xData = rows.map((r) => r[xField]);
-    const yData = rows.map((r) => r[yField]);
+    const xData = getColumn(xField);
+    const yData = getColumn(yField);
 
     const seriesData =
       type === "scatter"
@@ -87,7 +90,7 @@ export const ChartView: React.FC<Props> = ({
       yAxis: { type: "value", name: yField },
       series: [{ type: "scatter", data: seriesData, name: `${xField} vs ${yField}` }]
     };
-  }, [data, rows, type, xField, yField]);
+  }, [data, type, xField, yField, columns, columnData]);
 
   return (
     <div className="panel">

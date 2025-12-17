@@ -29,6 +29,7 @@ uv run uvicorn dataset_viz.app:app --host 127.0.0.1 --port 8000 --reload
 Environment knobs:
 - `DATASETS_DIR` default root if UI doesn't provide one (still offline only)
 - `QUERY_DEFAULT_LIMIT` to change the auto-added LIMIT (default 1000)
+- `QUERY_MAX_LIMIT` to cap per-request limit for UI responsiveness (default 5000)
 `HF_DATASETS_OFFLINE` is forced to `1`.
 
 ## Frontend
