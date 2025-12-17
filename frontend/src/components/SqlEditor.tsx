@@ -4,10 +4,6 @@ type Props = {
   sql: string;
   onChange: (v: string) => void;
   onRun: () => void;
-  limit: number;
-  onLimitChange: (n: number) => void;
-  offset: number;
-  onOffsetChange: (n: number) => void;
   disabled?: boolean;
 };
 
@@ -15,10 +11,6 @@ export const SqlEditor: React.FC<Props> = ({
   sql,
   onChange,
   onRun,
-  limit,
-  onLimitChange,
-  offset,
-  onOffsetChange,
   disabled
 }) => {
   return (
@@ -32,29 +24,7 @@ export const SqlEditor: React.FC<Props> = ({
           spellCheck={false}
           disabled={disabled}
         />
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
-            <label>Default limit</label>
-            <input
-              className="input"
-              type="number"
-              min={1}
-              value={limit}
-              onChange={(e) => onLimitChange(Number(e.target.value))}
-              style={{ width: 120 }}
-              disabled={disabled}
-            />
-            <label>Offset</label>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              value={offset}
-              onChange={(e) => onOffsetChange(Number(e.target.value))}
-              style={{ width: 120 }}
-              disabled={disabled}
-            />
-          </div>
+        <div className="row" style={{ justifyContent: "flex-end" }}>
           <button className="btn" onClick={() => onRun()} disabled={disabled}>
             Run Query
           </button>

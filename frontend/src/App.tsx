@@ -5,6 +5,7 @@ import { SqlEditor } from "./components/SqlEditor";
 import { ResultTable } from "./components/ResultTable";
 
 const DEFAULT_SQL = "SELECT * FROM t;";
+const PAGE_SIZE = 100;
 
 function App() {
   const [datasets, setDatasets] = useState<string[]>([]);
@@ -14,7 +15,6 @@ function App() {
   const [selectedSplit, setSelectedSplit] = useState<string | null>(null);
   const [schema, setSchema] = useState<ColumnInfo[]>([]);
   const [sql, setSql] = useState(DEFAULT_SQL);
-  const [limit, setLimit] = useState<number>(500);
   const [offset, setOffset] = useState<number>(0);
   const [result, setResult] = useState<QueryResponse | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
@@ -122,7 +122,7 @@ function App() {
       const res = await api.query(selectedDataset, datasetRoot, {
         sql: sqlToUse,
         split: selectedSplit,
-        limit,
+        limit: PAGE_SIZE,
         offset: offsetToUse
       }, controller.signal);
       if (requestId !== querySeq.current) return;
@@ -200,11 +200,6 @@ function App() {
     return result.truncated;
   }, [result, offset, totalCount]);
 
-  const handleLimitChange = (value: number) => {
-    setLimit(value);
-    setOffset(0);
-  };
-
   return (
     <div className="app">
       <div style={{ marginBottom: 16 }}>
@@ -247,11 +242,10 @@ function App() {
           <SqlEditor
             sql={sql}
             onChange={setSql}
-            onRun={runQuery}
-            limit={limit}
-            onLimitChange={handleLimitChange}
-            offset={offset}
-            onOffsetChange={setOffset}
+            onRun={() => {
+              setOffset(0);
+              runQuery(undefined, 0);
+            }}
             disabled={!selectedDataset || loading}
           />
           {error && <div className="error">{error}</div>}
@@ -277,7 +271,7 @@ function App() {
                 <button
                   className="btn secondary"
                   onClick={() => {
-                    const nextOffset = Math.max(0, offset - limit);
+                    const nextOffset = Math.max(0, offset - PAGE_SIZE);
                     setOffset(nextOffset);
                     runQuery(undefined, nextOffset);
                   }}
@@ -289,7 +283,7 @@ function App() {
                 <button
                   className="btn secondary"
                   onClick={() => {
-                    const nextOffset = offset + limit;
+                    const nextOffset = offset + PAGE_SIZE;
                     setOffset(nextOffset);
                     runQuery(undefined, nextOffset);
                   }}
