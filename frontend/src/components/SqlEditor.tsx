@@ -24,11 +24,9 @@ export const SqlEditor: React.FC<Props> = ({
           spellCheck={false}
           disabled={disabled}
         />
-        <div className="row" style={{ justifyContent: "flex-end" }}>
-          <button className="btn" onClick={() => onRun()} disabled={disabled}>
-            Run Query
-          </button>
-        </div>
+        <button className="btn" onClick={() => onRun()} disabled={disabled} style={{ width: "100%" }}>
+          Run Query
+        </button>
       </div>
     </div>
   );
