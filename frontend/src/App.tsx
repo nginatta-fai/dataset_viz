@@ -212,7 +212,7 @@ function App() {
       </div>
 
       <div className="panel" style={{ marginBottom: 12 }}>
-        <div className="row" style={{ gap: 12, alignItems: "center" }}>
+        <div className="row" style={{ gap: 12, alignItems: "flex-end" }}>
           <div style={{ flex: 1 }}>
             <label>Dataset folder path</label>
             <input
@@ -223,7 +223,7 @@ function App() {
               onChange={(e) => setDatasetRoot(e.target.value)}
             />
           </div>
-          <button className="btn" onClick={loadDatasets} style={{ whiteSpace: "nowrap" }}>
+          <button className="btn align-input" onClick={loadDatasets} style={{ whiteSpace: "nowrap" }}>
             Load datasets
           </button>
         </div>
